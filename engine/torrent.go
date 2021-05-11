@@ -25,6 +25,7 @@ type Torrent struct {
 	Deleted       bool
 	Done          bool
 	DoneCmdCalled bool
+	IsSeeding     bool
 	Percent       float32
 	DownloadRate  float32
 	UploadRate    float32
@@ -57,18 +58,17 @@ func (torrent *Torrent) Update(t *torrent.Torrent) {
 		torrent.updateLoaded(t)
 	}
 	if torrent.Magnet == "" {
+		// meta := t.Metainfo()
+		// m := meta.Magnet(t.Name(), t.InfoHash())
+		// torrent.Magnet = m.String()
+
+		// convert torrent to magnet
+		// since anacrolix/torrent version 1.26+
 		meta := t.Metainfo()
-		m := meta.Magnet(t.Name(), t.InfoHash())
-		torrent.Magnet = m.String()
-		/*
-			// convert torrent to magnet
-			// since anacrolix/torrent version 1.26+
-			meta := t.Metainfo()
-			if ifo, err := meta.UnmarshalInfo(); err == nil {
-				magnet := meta.Magnet(nil, &ifo).String()
-				torrent.Magnet = magnet
-			}
-		*/
+		if ifo, err := meta.UnmarshalInfo(); err == nil {
+			magnet := meta.Magnet(nil, &ifo).String()
+			torrent.Magnet = magnet
+		}
 	}
 	torrent.t = t
 }
@@ -118,10 +118,11 @@ func (torrent *Torrent) updateLoaded(t *torrent.Torrent) {
 	torrent.updatedAt = now
 	torrent.Percent = percent(bytes, torrent.Size)
 	torrent.Done = t.BytesMissing() == 0
+	torrent.IsSeeding = t.Seeding() && torrent.Done
 
 	// calculate ratio
 	bRead := torrent.Stats.BytesReadData.Int64()
-	bWrite := torrent.Stats.BytesWritten.Int64()
+	bWrite := torrent.Stats.BytesWrittenData.Int64()
 	if bRead > 0 {
 		torrent.SeedRatio = float32(bWrite) / float32(bRead)
 	}

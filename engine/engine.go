@@ -68,6 +68,8 @@ func (e *Engine) Configure(c *Config) error {
 	e.Lock()
 	defer e.Unlock()
 	tc := torrent.NewDefaultClientConfig()
+	tc.NoDefaultPortForwarding = c.NoDefaultPortForwarding
+	tc.DisableUTP = c.DisableUTP
 	tc.ListenPort = c.IncomingPort
 	tc.DataDir = c.DownloadDirectory
 	tc.Debug = c.EngineDebug
@@ -136,29 +138,40 @@ func (e *Engine) IsConfigred() bool {
 
 // NewMagnet -> *Torrent -> addTorrentTask
 func (e *Engine) NewMagnet(magnetURI string) error {
+	log.Println("[NewMagnet] called: ", magnetURI)
 	e.RLock()
 	tt, err := e.client.AddMagnet(magnetURI)
+	e.RUnlock()
 	if err != nil {
 		return err
 	}
-	e.RUnlock()
 	e.newMagnetCacheFile(magnetURI, tt.InfoHash().HexString())
 	return e.addTorrentTask(tt)
 }
 
 // NewTorrentBySpec -> *Torrent -> addTorrentTask
 func (e *Engine) NewTorrentBySpec(spec *torrent.TorrentSpec) error {
+	log.Println("[NewTorrentBySpec] called ")
 	e.RLock()
 	tt, _, err := e.client.AddTorrentSpec(spec)
+	e.RUnlock()
 	if err != nil {
 		return err
 	}
-	e.RUnlock()
 	return e.addTorrentTask(tt)
 }
 
 // NewTorrentByFilePath -> NewTorrentBySpec
 func (e *Engine) NewTorrentByFilePath(path string) error {
+
+	// torrent.TorrentSpecFromMetaInfo may panic if the info is malformed
+	defer func() error {
+		if r := recover(); r != nil {
+			return fmt.Errorf("Error loading new torrent from file %s: %+v", path, r)
+		}
+		return nil
+	}()
+
 	info, err := metainfo.LoadFromFile(path)
 	if err != nil {
 		return err
@@ -185,11 +198,12 @@ func (e *Engine) addTorrentTask(tt *torrent.Torrent) error {
 		case <-t.t.GotInfo():
 		}
 
-		e.removeMagnetCache(t.InfoHash)
+		h := t.InfoHash
+		e.removeMagnetCache(h)
+		e.newTorrentCacheFile(h, meta)
 		if e.config.AutoStart {
-			e.StartTorrent(t.InfoHash)
+			e.StartTorrent(h)
 		}
-		e.newTorrentCacheFile(t.InfoHash, t.t.Metainfo())
 	}()
 
 	return nil
@@ -310,7 +324,10 @@ func (e *Engine) StartTorrent(infohash string) error {
 		}
 	}
 	if t.t.Info() != nil {
-		// start file by setting the priority
+		t.t.AllowDataUpload()
+		t.t.AllowDataDownload()
+
+		// start all files by setting the priority to normal
 		for _, f := range t.t.Files() {
 			log.Println(f.Path())
 			log.Println(regexp.MustCompile(e.config.FileSuffix).MatchString(strings.ToLower(f.Path())))
@@ -336,11 +353,18 @@ func (e *Engine) StopTorrent(infohash string) error {
 	if !t.Started {
 		return fmt.Errorf("Already stopped")
 	}
-	//there is no stop - kill underlying torrent
-	t.t.Drop()
+
+	if t.t.Info() != nil {
+		// stop all files by setting the priority to None
+		for _, f := range t.t.Files() {
+			f.SetPriority(torrent.PiecePriorityNone)
+		}
+
+		t.t.DisallowDataUpload()
+		t.t.DisallowDataDownload()
+	}
+
 	t.Started = false
-	t.UploadRate = 0
-	t.DownloadRate = 0
 	for _, f := range t.Files {
 		if f != nil {
 			f.Started = false
@@ -360,14 +384,10 @@ func (e *Engine) DeleteTorrent(infohash string) error {
 	if !t.Deleted {
 		close(t.dropWait)
 		t.Deleted = true
+		t.t.Drop()
 	}
 	delete(e.ts, t.InfoHash)
 	e.Unlock()
-
-	ih := metainfo.NewHashFromHex(infohash)
-	if tt, ok := e.client.Torrent(ih); ok {
-		tt.Drop()
-	}
 
 	e.removeMagnetCache(infohash)
 	e.removeTorrentCache(infohash)
@@ -549,4 +569,13 @@ func (e *Engine) WriteStauts(_w io.Writer) {
 	if e.client != nil {
 		e.client.WriteStatus(_w)
 	}
+}
+
+func (e *Engine) ConnStat() torrent.ConnStats {
+	e.RLock()
+	defer e.RUnlock()
+	if e.client != nil {
+		return e.client.ConnStats()
+	}
+	return torrent.ConnStats{}
 }
