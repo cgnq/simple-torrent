@@ -1,10 +1,8 @@
-//go:build !windows
-// +build !windows
-
 package ffmpeg
 
 import (
 	"fmt"
+	"github.com/xfrr/goffmpeg/ffmpeg"
 	"github.com/xfrr/goffmpeg/transcoder"
 	"log"
 	"path"
@@ -28,8 +26,8 @@ func Tomp4(inputPath, outputPath string) {
 
 	trans := new(transcoder.Transcoder)
 
-	//fpath := ffmpeg.Configuration{FfprobeBin: "E:/worktool/ffmpeg/bin/ffprobe.exe ", FfmpegBin: "E:/worktool/ffmpeg/bin/ffmpeg.exe "}
-	//trans.SetConfiguration(fpath)
+	fpath := ffmpeg.Configuration{FfprobeBin: "E:/worktool/ffmpeg/bin/ffprobe.exe ", FfmpegBin: "E:/worktool/ffmpeg/bin/ffmpeg.exe "}
+	trans.SetConfiguration(fpath)
 	err := trans.Initialize(inputPath, outputPath)
 	log.Println("err:", err)
 	//trans.MediaFile().SetResolution("320x240")

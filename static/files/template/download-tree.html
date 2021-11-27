@@ -14,6 +14,7 @@
         <i ng-show="!deleting && confirm" ng-click="deleting = true; remove();" class="red check icon"></i>
         <i ng-show="deleting" class="grey notched circle loading icon"></i>
         <i ng-show="imagePreview || videoPreview || audioPreview" ng-click="togglePreview()" class="blue {{ showPreview ? 'circle outline' : 'video play outline' }} icon"></i>
+       <i ng-show="videoPreview" ng-click="toaria()" class="blue certificate icon"></i>
         <i ng-show="videoPreview" ng-click="tomp4()" class="blue film icon"></i>{{ node.Process }}
     </span>
   </div>

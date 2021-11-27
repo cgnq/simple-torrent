@@ -112,4 +112,12 @@ app.controller("NodeController", function($scope, $rootScope, $http, $timeout) {
   $scope.tomp4 = function() {
     $http.get("api/tomp4?input=" + n.$path+"&output="+n.$path);
   };
+  $scope.toaria = function() {
+    console.log()
+    $http.post("http://raspberrypi:6800/jsonrpc", '{"jsonrpc": "2.0", "method": "aria2.addUri","id": "QXJpYU5nXzE2MzgwMjA0NDFfMC42MzAwMTQ5MDIyNTY4NzY2","params": [["https://oloking.xyz/download/'+n.$path+'"],{}]}',
+        {
+      transformRequest: []
+    })
+  };
+
 });
