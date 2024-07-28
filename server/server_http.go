@@ -9,7 +9,7 @@ import (
 )
 
 func (s *Server) webHandle(w http.ResponseWriter, r *http.Request) {
-	//handle realtime client library
+	// serve realtime client library
 	if r.URL.Path == "/js/velox.js" {
 		velox.JS.ServeHTTP(w, r)
 		return
@@ -18,32 +18,42 @@ func (s *Server) webHandle(w http.ResponseWriter, r *http.Request) {
 		s.rssh.ServeHTTP(w, r)
 		return
 	}
-	//handle realtime client connections
+	// serve realtime client connection
 	if r.URL.Path == "/sync" {
 		conn, err := velox.Sync(&s.state, w, r)
 		if err != nil {
 			log.Printf("sync failed: %s", err)
 			return
 		}
+
+		// use mutex to protect access to state.Users
+		s.state.Lock()
 		s.state.Users[conn.ID()] = r.RemoteAddr
 		s.state.Push()
+		s.state.Unlock()
+
 		conn.Wait()
+
+		// use mutex to protect access to state.Users
+		s.state.Lock()
 		delete(s.state.Users, conn.ID())
 		s.state.Push()
+		s.state.Unlock()
+
 		return
 	}
-	//search
+	// search
 	if strings.HasPrefix(r.URL.Path, "/search") {
 		s.scraperh.ServeHTTP(w, r)
 		return
 	}
-	//api call
+	// API calls
 	if strings.HasPrefix(r.URL.Path, "/api/") {
 		w.Header().Set("Access-Control-Allow-Headers", "authorization")
 		s.restAPIhandle(w, r)
 		return
 	}
-	//no match, assume static file
+	// no matching path, assume static file
 	s.files.ServeHTTP(w, r)
 }
 
